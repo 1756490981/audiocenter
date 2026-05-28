@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Build output
+dist/
+build/
+*.spec
+
+# Compiled binaries (AudioHelper is built separately)
+binaries/
+AudioHelper.exe
+
+# Virtual environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# PyInstaller temp
+*.manifest

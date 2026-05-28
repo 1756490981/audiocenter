@@ -1,0 +1,4 @@
+;!@Install@!UTF-8!
+Title="AudioCenter"
+RunProgram="AudioCenter/AudioCenter.exe"
+;!@InstallEnd@!
