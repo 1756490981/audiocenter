@@ -1,4 +1,4 @@
-# AudioCenter - 阿云音频制作
+# AudioCenter - AI制作
 
 Windows 音频控制面板，基于 Python + customtkinter 构建。
 
