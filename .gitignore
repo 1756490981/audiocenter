@@ -28,3 +28,6 @@ Desktop.ini
 
 # PyInstaller temp
 *.manifest
+
+# License (not included in repo)
+license.dat

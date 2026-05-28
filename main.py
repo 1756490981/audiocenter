@@ -242,5 +242,30 @@ class AudioCenter(ctk.CTk):
 
 
 if __name__ == '__main__':
+    from license import verify_license
+    ok, machine_id, err = verify_license()
+    if not ok:
+        # Show activation dialog
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        if os.path.exists(ICON_PATH):
+            try:
+                root.iconbitmap(ICON_PATH)
+            except Exception:
+                pass
+        messagebox.showerror(
+            'AudioCenter - 未授权',
+            f'本软件需要授权才能使用。\n\n'
+            f'机器码：{machine_id}\n\n'
+            f'请联系开发者获取授权码：\n'
+            f'微信：AyunAudio\n\n'
+            f'（将授权码保存为 license.dat 放到程序目录即可）',
+            parent=root
+        )
+        root.destroy()
+        sys.exit(0)
+
     app = AudioCenter()
     app.mainloop()
