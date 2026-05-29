@@ -93,6 +93,11 @@ def is_studio_running():
     return None
 
 
+def get_studio_process():
+    """Return the running Studio process name, or None."""
+    return is_studio_running()
+
+
 # ── ASIO Driver Enumeration ──────────────────────────
 def _get_active_endpoint_names():
     names = set()
