@@ -39,14 +39,14 @@ class RecordingDeviceTab(ctk.CTkFrame):
         ctk.CTkLabel(header, text='选择默认录制设备', font=('Microsoft YaHei UI', 12),
                      text_color='#888888').pack(side='left')
         ctk.CTkButton(header, text='↻', width=28, height=28,
-                      fg_color='transparent', hover_color='#222244',
+                      fg_color='transparent', hover_color='#333333',
                       font=('Segoe UI', 16), text_color='#888888',
                       command=self.refresh).pack(side='right')
 
         # ── scrollable device list ──
         self._scroll = ctk.CTkScrollableFrame(
-            self, fg_color='transparent', scrollbar_button_color='#222244',
-            scrollbar_button_hover_color='#333355')
+            self, fg_color='transparent', scrollbar_button_color='#333333',
+            scrollbar_button_hover_color='#3a3a3a')
         self._scroll.pack(fill='both', expand=True, padx=12, pady=4)
 
         # ── disabled toggle ──
@@ -149,7 +149,7 @@ class RecordingDeviceTab(ctk.CTkFrame):
             self._disabled_btn = ctk.CTkButton(
                 self._disabled_header, text=label,
                 font=('Microsoft YaHei UI', 12), text_color='#666666',
-                fg_color='transparent', hover_color='#1a1a3a',
+                fg_color='transparent', hover_color='#2a2a2a',
                 anchor='w', command=self._toggle_disabled)
             self._disabled_btn.pack(fill='x')
 
@@ -157,9 +157,9 @@ class RecordingDeviceTab(ctk.CTkFrame):
         is_default = d.get('isDefault', False)
         vol = self._volumes.get(d['id'], {})
 
-        frame = ctk.CTkFrame(self._scroll, fg_color='#14142e', corner_radius=8,
+        frame = ctk.CTkFrame(self._scroll, fg_color='#1e1e1e', corner_radius=8,
                               border_width=1,
-                              border_color='#3b82f6' if is_default else '#1e1e3a')
+                              border_color='#07C160' if is_default else '#2a2a2a')
         if not hidden:
             frame.pack(fill='x', pady=2)
         else:
@@ -170,16 +170,16 @@ class RecordingDeviceTab(ctk.CTkFrame):
         top.pack(fill='x', padx=10, pady=(10, 4))
 
         ctk.CTkLabel(top, text=d.get('name', ''), font=('Microsoft YaHei UI', 13),
-                     text_color='#cccccc', anchor='w').pack(side='left')
+                     text_color='#e0e0e0', anchor='w').pack(side='left')
 
         if is_default:
             ctk.CTkLabel(top, text='默认', font=('Microsoft YaHei UI', 11),
-                         text_color='#ffffff', fg_color='#3b82f6',
+                         text_color='#ffffff', fg_color='#07C160',
                          corner_radius=4, width=30, height=18).pack(side='right', padx=(4, 0))
         elif d.get('state') == 'active':
             ctk.CTkButton(top, text='设为默认', font=('Microsoft YaHei UI', 11),
-                          text_color='#3b82f6', fg_color='transparent',
-                          hover_color='#1a1a3a', width=60, height=22,
+                          text_color='#07C160', fg_color='transparent',
+                          hover_color='#2a2a2a', width=60, height=22,
                           command=lambda did=d['id']: self._set_default(did)).pack(side='right')
 
         state_text = STATE_MAP.get(d.get('state'), d.get('state', ''))
@@ -195,19 +195,19 @@ class RecordingDeviceTab(ctk.CTkFrame):
             ctk.CTkButton(
                 vrow, text='🔇' if vol.get('muted') else '🔊',
                 width=24, height=24, fg_color='transparent',
-                hover_color='#222244', font=('Segoe UI', 12),
+                hover_color='#333333', font=('Segoe UI', 12),
                 command=lambda did=d['id'], mv=mute_var: self._toggle_mute(did, mv)
             ).pack(side='left')
 
             slider = ctk.CTkSlider(
                 vrow, from_=0, to=100, width=200, height=14,
-                fg_color='#1a1a3a', progress_color='#3b82f6',
-                button_color='#3b82f6', button_hover_color='#6090f0')
+                fg_color='#2a2a2a', progress_color='#07C160',
+                button_color='#07C160', button_hover_color='#0ad470')
             slider.set(vol.get('volume', 100))
             slider.pack(side='left', fill='x', expand=True, padx=8)
 
             val_lbl = ctk.CTkLabel(vrow, text=str(vol.get('volume', 100)),
-                                     font=('Microsoft YaHei UI', 11), text_color='#777777',
+                                     font=('Microsoft YaHei UI', 11), text_color='#888888',
                                      width=24)
             val_lbl.pack(side='right')
             slider.configure(command=lambda v, did=d['id'], lbl=val_lbl: self._set_volume(did, int(float(v)), lbl))
@@ -260,8 +260,8 @@ class RecordingDeviceTab(ctk.CTkFrame):
         self._render()
 
     def _context_menu(self, event, device):
-        menu = Menu(self, tearoff=0, bg='#1a1a2e', fg='#cccccc',
-                     activebackground='#2a2a4a', activeforeground='#ffffff',
+        menu = Menu(self, tearoff=0, bg='#1a1a2e', fg='#e0e0e0',
+                     activebackground='#3a3a3a', activeforeground='#ffffff',
                      font=('Microsoft YaHei UI', 12))
         if device.get('state') == 'active':
             menu.add_command(label='调整格式', command=lambda: self._show_format(device))
@@ -297,7 +297,7 @@ class RecordingDeviceTab(ctk.CTkFrame):
 
         ctk.CTkLabel(dialog, text=f'调整格式 — {device.get("name", "")}',
                      font=('Microsoft YaHei UI', 14, 'bold'),
-                     text_color='#cccccc').pack(pady=(12, 8))
+                     text_color='#e0e0e0').pack(pady=(12, 8))
 
         sr_var = ctk.IntVar(value=48000)
         bd_var = ctk.IntVar(value=24)
@@ -319,9 +319,9 @@ class RecordingDeviceTab(ctk.CTkFrame):
         sr_menu = ctk.CTkOptionMenu(grid, values=[str(s) for s in SAMPLE_RATES],
                                      variable=ctk.StringVar(value='48000'),
                                      font=('Microsoft YaHei UI', 12),
-                                     fg_color='#1a1a3a', button_color='#1a1a3a',
-                                     button_hover_color='#2a2a4a',
-                                     dropdown_fg_color='#14142e',
+                                     fg_color='#2a2a2a', button_color='#2a2a2a',
+                                     button_hover_color='#3a3a3a',
+                                     dropdown_fg_color='#1e1e1e',
                                      command=lambda v: sr_var.set(int(v)))
         sr_menu.grid(row=1, column=0, padx=4, pady=2)
 
@@ -330,9 +330,9 @@ class RecordingDeviceTab(ctk.CTkFrame):
         bd_menu = ctk.CTkOptionMenu(grid, values=[str(b) for b in BIT_DEPTHS],
                                      variable=ctk.StringVar(value='24'),
                                      font=('Microsoft YaHei UI', 12),
-                                     fg_color='#1a1a3a', button_color='#1a1a3a',
-                                     button_hover_color='#2a2a4a',
-                                     dropdown_fg_color='#14142e',
+                                     fg_color='#2a2a2a', button_color='#2a2a2a',
+                                     button_hover_color='#3a3a3a',
+                                     dropdown_fg_color='#1e1e1e',
                                      command=lambda v: bd_var.set(int(v)))
         bd_menu.grid(row=1, column=1, padx=4, pady=2)
 
@@ -342,9 +342,9 @@ class RecordingDeviceTab(ctk.CTkFrame):
         ch_menu = ctk.CTkOptionMenu(grid, values=ch_names,
                                      variable=ctk.StringVar(value='立体声'),
                                      font=('Microsoft YaHei UI', 12),
-                                     fg_color='#1a1a3a', button_color='#1a1a3a',
-                                     button_hover_color='#2a2a4a',
-                                     dropdown_fg_color='#14142e',
+                                     fg_color='#2a2a2a', button_color='#2a2a2a',
+                                     button_hover_color='#3a3a3a',
+                                     dropdown_fg_color='#1e1e1e',
                                      command=lambda v: ch_var.set(1 if v == '单声道' else 2))
         ch_menu.grid(row=1, column=2, padx=4, pady=2)
 
@@ -360,14 +360,14 @@ class RecordingDeviceTab(ctk.CTkFrame):
                                 ch_menu.set('单声道' if ch == 1 else '立体声')]
             ctk.CTkButton(
                 preset_frame, text=f'{label} ({sr}/{bd}bit)',
-                font=('Microsoft YaHei UI', 11), fg_color='#1a1a3a',
-                hover_color='#2a2a4a', text_color='#999999',
+                font=('Microsoft YaHei UI', 11), fg_color='#2a2a2a',
+                hover_color='#3a3a3a', text_color='#999999',
                 command=make_cmd()).pack(side='left', padx=2, pady=2)
 
         btn_row = ctk.CTkFrame(form, fg_color='transparent')
         btn_row.pack(fill='x', padx=16, pady=(16, 12))
         ctk.CTkButton(btn_row, text='取消', font=('Microsoft YaHei UI', 12),
-                      fg_color='#1a1a3a', hover_color='#2a2a4a',
+                      fg_color='#2a2a2a', hover_color='#3a3a3a',
                       text_color='#999999', command=dialog.destroy).pack(side='right', padx=4)
 
         def _apply():
@@ -381,7 +381,7 @@ class RecordingDeviceTab(ctk.CTkFrame):
             dialog.destroy()
 
         ctk.CTkButton(btn_row, text='应用', font=('Microsoft YaHei UI', 12),
-                      fg_color='#3b82f6', hover_color='#6090f0',
+                      fg_color='#07C160', hover_color='#0ad470',
                       command=_apply).pack(side='right')
 
         # Fetch format in background
@@ -413,7 +413,7 @@ class RecordingDeviceTab(ctk.CTkFrame):
 
         ctk.CTkLabel(dialog, text=f'侦听设备 — {device.get("name", "")}',
                      font=('Microsoft YaHei UI', 14, 'bold'),
-                     text_color='#cccccc').pack(pady=(12, 12))
+                     text_color='#e0e0e0').pack(pady=(12, 12))
 
         listen_enabled = ctk.BooleanVar(value=False)
         loading = ctk.CTkLabel(dialog, text='正在读取...', font=('Microsoft YaHei UI', 12),
@@ -426,10 +426,10 @@ class RecordingDeviceTab(ctk.CTkFrame):
         toggle_frame = ctk.CTkFrame(form, fg_color='transparent')
         toggle_frame.pack(fill='x', padx=16, pady=(0, 8))
         ctk.CTkLabel(toggle_frame, text='侦听此设备', font=('Microsoft YaHei UI', 13),
-                     text_color='#cccccc').pack(side='left')
+                     text_color='#e0e0e0').pack(side='left')
         ctk.CTkSwitch(toggle_frame, variable=listen_enabled,
-                      text='', fg_color='#3b82f6',
-                      progress_color='#3b82f6').pack(side='right')
+                      text='', fg_color='#07C160',
+                      progress_color='#07C160').pack(side='right')
 
         ctk.CTkLabel(form, text='通过此设备播放', font=('Microsoft YaHei UI', 11),
                      text_color='#888888', anchor='w').pack(fill='x', padx=16, pady=(8, 2))
@@ -440,15 +440,15 @@ class RecordingDeviceTab(ctk.CTkFrame):
         pb_menu = ctk.CTkOptionMenu(
             form, values=pb_names, variable=pb_var,
             font=('Microsoft YaHei UI', 12),
-            fg_color='#1a1a3a', button_color='#1a1a3a',
-            button_hover_color='#2a2a4a',
-            dropdown_fg_color='#14142e')
+            fg_color='#2a2a2a', button_color='#2a2a2a',
+            button_hover_color='#3a3a3a',
+            dropdown_fg_color='#1e1e1e')
         pb_menu.pack(fill='x', padx=16)
 
         btn_row = ctk.CTkFrame(form, fg_color='transparent')
         btn_row.pack(fill='x', padx=16, pady=(20, 12))
         ctk.CTkButton(btn_row, text='取消', font=('Microsoft YaHei UI', 12),
-                      fg_color='#1a1a3a', hover_color='#2a2a4a',
+                      fg_color='#2a2a2a', hover_color='#3a3a3a',
                       text_color='#999999', command=dialog.destroy).pack(side='right', padx=4)
 
         def _save():
@@ -462,7 +462,7 @@ class RecordingDeviceTab(ctk.CTkFrame):
             dialog.destroy()
 
         ctk.CTkButton(btn_row, text='保存', font=('Microsoft YaHei UI', 12),
-                      fg_color='#3b82f6', hover_color='#6090f0',
+                      fg_color='#07C160', hover_color='#0ad470',
                       command=_save).pack(side='right')
 
         # Fetch listen state in background

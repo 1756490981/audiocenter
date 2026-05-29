@@ -1,23 +1,35 @@
 """AudioCenter — Windows audio control panel (Python + customtkinter)."""
 import sys
 import os
+import threading
 import customtkinter as ctk
 from audio import AudioHelper
 from themecolors import C
+import pystray
+from PIL import Image
 
 ctk.set_appearance_mode('dark')
 ctk.set_default_color_theme('blue')
 
-WIDTH, HEIGHT = 540, 640
-MIN_W, MIN_H = 460, 520
+WIDTH, HEIGHT = 580, 700
+MIN_W, MIN_H = 500, 580
+SIDEBAR_W = 72
 
 ICON_PATH = os.path.join(os.path.dirname(__file__), 'icon.ico')
+
+TABS = [
+    ('🎵', '音量', 'mixer'),
+    ('🎧', '播放', 'playback'),
+    ('🎤', '录制', 'recording'),
+    ('💾', '配置', 'profiles'),
+    ('🔧', 'Studio', 'studio'),
+]
 
 
 class AudioCenter(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title('AudioCenter - 阿云音频制作')
+        self.title('AudioCenter - 阿云音频制作 微信：AyunAudio')
         self.geometry(f'{WIDTH}x{HEIGHT}')
         self.minsize(MIN_W, MIN_H)
         self.resizable(False, False)
@@ -25,7 +37,7 @@ class AudioCenter(ctk.CTk):
         if os.path.exists(ICON_PATH):
             self.iconbitmap(ICON_PATH)
 
-        # Center on screen (within bounds)
+        # Center on screen
         self.update_idletasks()
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
@@ -33,23 +45,21 @@ class AudioCenter(ctk.CTk):
         y = max(0, (sh - HEIGHT) // 2)
         self.geometry(f'{WIDTH}x{HEIGHT}+{x}+{y}')
 
-        # Remove native titlebar (we draw our own)
+        # Custom titlebar
         self.overrideredirect(True)
         self.attributes('-topmost', True)
-        self.after(200, lambda: self.attributes('-topmost', False))
-
-        # Show in taskbar despite overrideredirect
         self.after(10, self._set_taskbar_icon)
 
-        # Placeholder — real helper created after window is mapped
         self.helper = None
+        self._active_tab = 0
+        self._tray_icon = None
 
         # Build UI
         self._build_titlebar()
-        self._build_tabs()
+        self._build_body()
         self._build_loading()
 
-        # Drag support for custom titlebar — bind to titlebar and all non-button children
+        # Drag support
         self._drag_x = 0
         self._drag_y = 0
         self.titlebar.bind('<Button-1>', self._drag_start)
@@ -61,14 +71,11 @@ class AudioCenter(ctk.CTk):
             lbl.bind('<Button-1>', self._drag_start)
             lbl.bind('<B1-Motion>', self._drag_move)
 
-        # Handle close
         self.protocol('WM_DELETE_WINDOW', self._on_close)
-
-        # Start AudioHelper in background (UAC prompt will appear)
         self.after(100, self._init_helper)
+        self._setup_tray()
 
     def _init_helper(self):
-        """Start AudioHelper in background (may trigger UAC prompt)."""
         import threading
         def _start():
             try:
@@ -80,19 +87,18 @@ class AudioCenter(ctk.CTk):
         threading.Thread(target=_start, daemon=True).start()
 
     def _on_helper_ready(self):
-        """Called when AudioHelper is ready — replace loading with content."""
         self._loading_frame.destroy()
         self._build_content()
+        self._switch_tab(0)
 
     def _show_init_error(self, msg):
         self._loading_label.configure(
             text=f'音频服务启动失败\n{msg}\n\n请以管理员身份运行此程序',
-            text_color='#dc2626')
+            text_color='#e74c3c')
 
     def _build_loading(self):
-        """Show loading state while AudioHelper starts."""
-        self._loading_frame = ctk.CTkFrame(self, fg_color='transparent')
-        self._loading_frame.pack(fill='both', expand=True, side='top')
+        self._loading_frame = ctk.CTkFrame(self.content_area, fg_color='transparent')
+        self._loading_frame.pack(fill='both', expand=True)
         self._loading_label = ctk.CTkLabel(
             self._loading_frame,
             text='正在启动音频服务...\n\n如弹出用户账户控制窗口，请点击"是"',
@@ -115,7 +121,7 @@ class AudioCenter(ctk.CTk):
         self.titlebar_icon = ctk.CTkLabel(inner, text='🎵', font=('Segoe UI', 15))
         self.titlebar_icon.pack(side='left', padx=(4, 2))
 
-        self.titlebar_label = ctk.CTkLabel(inner, text='AudioCenter - 阿云音频制作',
+        self.titlebar_label = ctk.CTkLabel(inner, text='AudioCenter - 阿云音频制作 微信：AyunAudio',
                                            font=('Segoe UI', 12, 'bold'),
                                            text_color=C['text_primary'])
         self.titlebar_label.pack(side='left')
@@ -128,9 +134,21 @@ class AudioCenter(ctk.CTk):
                                        hover_color='#cc3333', **btn_style)
         self.close_btn.pack(side='right')
 
-        self.min_btn = ctk.CTkButton(inner, text='─', command=self.iconify,
+        self.min_btn = ctk.CTkButton(inner, text='─', command=self._minimize,
                                      hover_color=C['btn_icon_hover'], **btn_style)
         self.min_btn.pack(side='right', padx=1)
+
+    def _minimize(self):
+        """Minimize to taskbar (works with overrideredirect)."""
+        self.overrideredirect(False)
+        self.iconify()
+        self.after(100, self._restore_overrideredirect)
+
+    def _restore_overrideredirect(self):
+        if self.state() == 'normal':
+            self.overrideredirect(True)
+        else:
+            self.after(100, self._restore_overrideredirect)
 
     def _drag_start(self, event):
         self._drag_x = event.x
@@ -139,7 +157,6 @@ class AudioCenter(ctk.CTk):
     def _drag_move(self, event):
         x = event.x_root - self._drag_x
         y = event.y_root - self._drag_y
-        # Keep window on screen
         sw = self.winfo_screenwidth()
         sh = self.winfo_screenheight()
         x = max(0, min(x, sw - 100))
@@ -147,7 +164,6 @@ class AudioCenter(ctk.CTk):
         self.geometry(f'+{x}+{y}')
 
     def _set_taskbar_icon(self):
-        """Force overrideredirect window to appear in the taskbar."""
         import ctypes
         GWL_EXSTYLE = -20
         WS_EX_APPWINDOW = 0x00040000
@@ -155,75 +171,121 @@ class AudioCenter(ctk.CTk):
         style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
         style = style | WS_EX_APPWINDOW
         ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-        # Re-withdraw/deiconify to make taskbar pick up the new style
+        self.overrideredirect(False)
         self.withdraw()
-        self.after(10, self.deiconify)
+        self.after(50, self._restore_taskbar)
+
+    def _restore_taskbar(self):
+        self.overrideredirect(True)
+        self.deiconify()
 
     def _on_close(self):
+        """Minimize to tray instead of closing."""
+        self.withdraw()
+
+    def _quit_app(self):
+        """Actually quit the application."""
+        if self._tray_icon:
+            try:
+                self._tray_icon.visible = False
+                self._tray_icon.stop()
+            except Exception:
+                pass
         if self.helper:
             self.helper.close()
         self.destroy()
 
-    # ── tabs ───────────────────────────────────────────────────
-    def _build_tabs(self):
-        self.tab_frame = ctk.CTkFrame(self, height=34,
-                                      fg_color=C['tab_strip_bg'],
-                                      corner_radius=0)
-        self.tab_frame.pack(fill='x', side='top')
-        self.tab_frame.pack_propagate(False)
+    def _setup_tray(self):
+        """Create system tray icon in a background thread."""
+        def _create_icon():
+            try:
+                if os.path.exists(ICON_PATH):
+                    img = Image.open(ICON_PATH)
+                else:
+                    img = Image.new('RGB', (64, 64), '#07C160')
+            except Exception:
+                img = Image.new('RGB', (64, 64), '#07C160')
 
-        btn_font = ('Segoe UI', 13)
-        self._tab_buttons: list[ctk.CTkButton] = []
-        self._active_tab = 0
-
-        tabs = [
-            ('🎵 音量混合器', 'mixer'),
-            ('🎧 播放设备', 'playback'),
-            ('🎤 录制设备', 'recording'),
-            ('💾 高级功能', 'profiles'),
-            ('🔧 Studio One', 'studio'),
-        ]
-
-        tab_btn_w = (WIDTH - 5) // 5
-        for i, (label, key) in enumerate(tabs):
-            btn = ctk.CTkButton(
-                self.tab_frame, text=label, font=btn_font,
-                fg_color='transparent', text_color=C['text_secondary'],
-                hover_color=C['tab_hover'], corner_radius=0, width=tab_btn_w,
-                command=lambda k=key, idx=i: self._switch_tab(idx),
+            menu = pystray.Menu(
+                pystray.MenuItem('显示窗口', lambda: self.after(0, self._show_window)),
+                pystray.MenuItem('退出', lambda: self.after(0, self._quit_app)),
             )
-            btn.pack(side='left', fill='y', padx=0)
-            self._tab_buttons.append(btn)
+            self._tray_icon = pystray.Icon(
+                'AudioCenter', img, 'AudioCenter', menu)
+            self._tray_icon.run()
 
-        self._tab_indicator = ctk.CTkFrame(
-            self.tab_frame, height=2, width=120,
+        threading.Thread(target=_create_icon, daemon=True).start()
+
+    def _show_window(self):
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    # ── sidebar ───────────────────────────────────────────────
+    def _build_body(self):
+        """Build sidebar + content area."""
+        body = ctk.CTkFrame(self, fg_color='transparent')
+        body.pack(fill='both', expand=True, side='top')
+
+        # Sidebar
+        self.sidebar = ctk.CTkFrame(body, width=SIDEBAR_W,
+                                     fg_color=C['sidebar_bg'],
+                                     corner_radius=0)
+        self.sidebar.pack(side='left', fill='y')
+        self.sidebar.pack_propagate(False)
+
+        # Content area
+        self.content_area = ctk.CTkFrame(body, fg_color='transparent')
+        self.content_area.pack(side='right', fill='both', expand=True)
+
+        # Build sidebar buttons
+        self._sidebar_buttons: list[ctk.CTkButton] = []
+        self._sidebar_indicator = ctk.CTkFrame(
+            self.sidebar, width=3, height=40,
             fg_color=C['accent'], corner_radius=0)
-        self._tab_indicator.place(x=0, y=32)
+
+        for i, (icon, label, key) in enumerate(TABS):
+            btn = ctk.CTkButton(
+                self.sidebar, text=f'{icon}\n{label}',
+                font=('Microsoft YaHei UI', 10),
+                fg_color='transparent',
+                text_color=C['text_dim'],
+                hover_color=C['sidebar_hover'],
+                corner_radius=8, width=60, height=56,
+                command=lambda idx=i: self._switch_tab(idx),
+            )
+            btn.pack(pady=4, padx=6)
+            self._sidebar_buttons.append(btn)
 
     def _switch_tab(self, idx):
         self._active_tab = idx
-        for i, btn in enumerate(self._tab_buttons):
-            btn.configure(
-                text_color=C['accent'] if i == idx else C['text_secondary'],
-                fg_color=C['tab_active_bg'] if i == idx else 'transparent',
-            )
+        # Update sidebar buttons
+        for i, btn in enumerate(self._sidebar_buttons):
+            if i == idx:
+                btn.configure(fg_color=C['sidebar_active'],
+                              text_color=C['accent'])
+            else:
+                btn.configure(fg_color='transparent',
+                              text_color=C['text_dim'])
+
         # Move indicator
-        tw = (WIDTH - 5) // 5
-        self._tab_indicator.configure(width=tw)
-        self._tab_indicator.place(x=idx * tw, y=32)
+        self._sidebar_indicator.place(
+            x=0, y=idx * 64 + 8 + 8)  # pady=4*2 + offset
 
         # Show content
-        tab_names = ['mixer', 'playback', 'recording', 'profiles', 'studio']
-        for name in tab_names:
-            frame = getattr(self, f'tab_{name}', None)
+        tab_keys = [t[2] for t in TABS]
+        for key in tab_keys:
+            frame = getattr(self, f'tab_{key}', None)
             if frame:
                 frame.pack_forget()
-        getattr(self, f'tab_{tab_names[idx]}').pack(fill='both', expand=True)
+        target = getattr(self, f'tab_{tab_keys[idx]}', None)
+        if target:
+            target.pack(fill='both', expand=True)
 
     # ── content ────────────────────────────────────────────────
     def _build_content(self):
-        self.content_frame = ctk.CTkFrame(self, fg_color='transparent')
-        self.content_frame.pack(fill='both', expand=True, side='top')
+        self.content_frame = ctk.CTkFrame(self.content_area, fg_color='transparent')
+        self.content_frame.pack(fill='both', expand=True)
 
         from tabs.mixer import VolumeMixerTab
         from tabs.playback import PlaybackDeviceTab
@@ -237,10 +299,19 @@ class AudioCenter(ctk.CTk):
         self.tab_profiles = ProfileManagerTab(self.content_frame, self.helper)
         self.tab_studio = StudioOneTab(self.content_frame, self.helper)
 
-        self.tab_mixer.pack(fill='both', expand=True)
-        self._tab_buttons[0].configure(text_color=C['accent'], fg_color=C['tab_active_bg'])
-
 
 if __name__ == '__main__':
+    # Single instance check — prevent multiple windows
+    import ctypes
+    _mutex = ctypes.windll.kernel32.CreateMutexW(None, False, 'Global\\AudioCenter_AyunAudio')
+    if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showwarning('AudioCenter', '软件已在运行中，请勿重复打开。', parent=root)
+        root.destroy()
+        sys.exit(0)
+
     app = AudioCenter()
     app.mainloop()

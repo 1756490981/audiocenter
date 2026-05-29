@@ -38,8 +38,10 @@ _NO_WIN = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW')
 
 
 # ── Utilities ────────────────────────────────────────
-def find_settings_dir():
-    dirs = []
+def find_all_studio_versions():
+    """Return list of {version, settings_dir, exe_path, proc_name} sorted by version desc."""
+    # Collect settings dirs
+    settings_map = {}
     for vendor in ["PreSonus", "Fender"]:
         base = APPDATA / vendor
         if not base.exists():
@@ -49,13 +51,11 @@ def find_settings_dir():
                 continue
             m = re.match(r"^Studio\s*(?:One|Pro)\s*(\d+)$", d.name, re.IGNORECASE)
             if m:
-                dirs.append((int(m.group(1)), d))
-    dirs.sort(key=lambda x: x[0], reverse=True)
-    return dirs[0][1] if dirs else None
+                ver = int(m.group(1))
+                settings_map[ver] = d
 
-
-def find_studio_exe():
-    exes = []
+    # Collect exe paths
+    exe_map = {}
     search_bases = ["C:/Program Files", "C:/Program Files (x86)"]
     for vendor in ["PreSonus", "Fender"]:
         for base in list(search_bases):
@@ -69,13 +69,42 @@ def find_studio_exe():
             m = re.match(r"^Studio\s*(?:One|Pro)\s*(\d+)$", d, re.IGNORECASE)
             if not m:
                 continue
+            ver = int(m.group(1))
             full = Path(base) / d
             for name in STUDIO_PROC_NAMES:
                 exe = full / name
                 if exe.exists():
-                    exes.append((int(m.group(1)), exe))
-    exes.sort(key=lambda x: x[0], reverse=True)
-    return exes[0][1] if exes else None
+                    exe_map[ver] = exe
+
+    # Merge
+    all_versions = set(settings_map.keys()) | set(exe_map.keys())
+    result = []
+    for ver in sorted(all_versions, reverse=True):
+        result.append({
+            "version": ver,
+            "label": f"Studio One/Pro {ver}",
+            "settings_dir": settings_map.get(ver),
+            "exe_path": exe_map.get(ver),
+        })
+    return result
+
+
+def find_settings_dir():
+    """Auto: return highest version's settings dir."""
+    versions = find_all_studio_versions()
+    for v in versions:
+        if v["settings_dir"]:
+            return v["settings_dir"]
+    return None
+
+
+def find_studio_exe():
+    """Auto: return highest version's exe path."""
+    versions = find_all_studio_versions()
+    for v in versions:
+        if v["exe_path"]:
+            return v["exe_path"]
+    return None
 
 
 def is_studio_running():
@@ -163,13 +192,13 @@ def enum_asio_drivers():
 
 
 # ── AudioEngine.settings Operations ──────────────────
-def get_settings_path():
-    d = find_settings_dir()
+def get_settings_path(settings_dir=None):
+    d = settings_dir or find_settings_dir()
     return d / "x64" / "AudioEngine.settings" if d else None
 
 
-def read_audio_engine():
-    p = get_settings_path()
+def read_audio_engine(settings_dir=None):
+    p = get_settings_path(settings_dir)
     if not p or not p.exists():
         return None
     tree = ET.parse(str(p))
@@ -193,8 +222,8 @@ def read_audio_engine():
 
 
 def write_audio_engine(master_device, sample_rate="48000", block_size="128",
-                       failed_devices="", **kwargs):
-    p = get_settings_path()
+                       failed_devices="", settings_dir=None, **kwargs):
+    p = get_settings_path(settings_dir)
     if not p:
         return False
 
@@ -313,13 +342,41 @@ class StudioOneTab(ctk.CTkFrame):
         super().destroy()
 
     def _bg_refresh(self):
+        last_running = None
         while self._alive:
             time.sleep(3.0)
             if not self._alive:
                 break
-            self.after(0, self._refresh)
+            running = is_studio_running()
+            if running != last_running:
+                last_running = running
+                self.after(0, self._refresh)
+            else:
+                # Only update status text, skip expensive ASIO scan
+                self.after(0, self._update_status_only)
 
     def _build_ui(self):
+        # ── Version selector ───────────────────────────
+        ver_frame = ctk.CTkFrame(self, fg_color="transparent")
+        ver_frame.pack(padx=12, pady=(12, 4), fill="x")
+
+        ctk.CTkLabel(ver_frame, text="选择版本:",
+                     font=('Microsoft YaHei UI', 12),
+                     text_color=C['text_secondary']).pack(side="left")
+
+        self._all_versions = find_all_studio_versions()
+        ver_labels = ["自动（最高版本）"] + [v["label"] for v in self._all_versions]
+        self._ver_var = ctk.StringVar(value=ver_labels[0])
+        self._ver_menu = ctk.CTkOptionMenu(
+            ver_frame, values=ver_labels, variable=self._ver_var, width=200,
+            font=('Microsoft YaHei UI', 12),
+            fg_color=C['btn_bg'], button_color=C['btn_bg'],
+            button_hover_color=C['btn_hover'],
+            dropdown_fg_color=C['dropdown_bg'],
+            command=lambda _: self._on_version_change(),
+        )
+        self._ver_menu.pack(side="left", padx=(8, 0))
+
         # ── Status ───────────────────────────────────
         ctk.CTkLabel(
             self, text="Studio One 状态",
@@ -438,16 +495,25 @@ class StudioOneTab(ctk.CTkFrame):
             text_color=C['text_dim'],
         ).pack(padx=12, pady=(10, 4), anchor="w")
 
-    def _set_text(self, box, text):
-        box.configure(state="normal")
-        box.delete("1.0", "end")
-        box.insert("1.0", text)
-        box.configure(state="disabled")
+    def _get_selected_version(self):
+        """Return {settings_dir, exe_path} for the selected version, or None for auto."""
+        sel = self._ver_var.get()
+        if sel.startswith("自动"):
+            return None
+        for v in self._all_versions:
+            if v["label"] == sel:
+                return v
+        return None
 
-    def _refresh(self):
+    def _on_version_change(self):
+        self._refresh()
+
+    def _update_status_only(self):
+        """Lightweight refresh — only update running status, skip ASIO scan."""
+        ver = self._get_selected_version()
+        s_dir = ver["settings_dir"] if ver else find_settings_dir()
+        exe = ver["exe_path"] if ver else find_studio_exe()
         running = is_studio_running()
-        s_dir = find_settings_dir()
-        exe = find_studio_exe()
         lines = [
             f"  Studio One: {'运行中' if running else '未运行'}",
         ]
@@ -459,50 +525,59 @@ class StudioOneTab(ctk.CTkFrame):
             lines.append(f"  程序路径: {exe}")
         self._set_text(self.status_box, "\n".join(lines))
 
-        self.asio_drivers = enum_asio_drivers()
+    def _set_text(self, box, text):
+        box.configure(state="normal")
+        box.delete("1.0", "end")
+        box.insert("1.0", text)
+        box.configure(state="disabled")
+
+    def _refresh(self):
+        ver = self._get_selected_version()
+        s_dir = ver["settings_dir"] if ver else find_settings_dir()
+        exe = ver["exe_path"] if ver else find_studio_exe()
+
+        # Refresh available versions
+        self._all_versions = find_all_studio_versions()
+        ver_labels = ["自动（最高版本）"] + [v["label"] for v in self._all_versions]
+        self._ver_menu.configure(values=ver_labels)
+
+        running = is_studio_running()
+        lines = [
+            f"  Studio One: {'运行中' if running else '未运行'}",
+        ]
+        if s_dir:
+            lines.append(f"  设置目录: {s_dir}")
+        else:
+            lines.append("  未检测到 Studio One")
+        if exe:
+            lines.append(f"  程序路径: {exe}")
+        self._set_text(self.status_box, "\n".join(lines))
+
+        new_drivers = enum_asio_drivers()
 
         # Auto-select: failed device first, else first online
-        current_cfg = read_audio_engine()
+        current_cfg = read_audio_engine(s_dir)
         failed = current_cfg.get("failedDevices", "") if current_cfg else ""
-        if not self.selected_driver and self.asio_drivers:
-            for drv in self.asio_drivers:
+        if not self.selected_driver and new_drivers:
+            for drv in new_drivers:
                 if failed and drv["clsid"].lower() == failed.lower():
                     self.selected_driver = drv
                     break
             if not self.selected_driver:
-                for drv in self.asio_drivers:
+                for drv in new_drivers:
                     if drv["connected"]:
                         self.selected_driver = drv
                         break
 
-        for w in self.driver_list.winfo_children():
-            w.destroy()
-
-        for drv in self.asio_drivers:
-            status = "[在线]" if drv["connected"] else "[离线]"
-            color = "#22c55e" if drv["connected"] else "#6b7280"
-            frame = ctk.CTkFrame(self.driver_list, fg_color="transparent")
-            frame.pack(fill="x", pady=1)
-
-            ctk.CTkLabel(
-                frame,
-                text=f"  {status}  {drv['name']}",
-                font=('Microsoft YaHei UI', 12),
-                text_color=color,
-            ).pack(side="left")
-
-            is_sel = (
-                self.selected_driver
-                and self.selected_driver["clsid"] == drv["clsid"]
-            )
-            sel_text = "已选中" if is_sel else "选中"
-            ctk.CTkButton(
-                frame, text=sel_text, width=70, height=24,
-                font=('Microsoft YaHei UI', 11),
-                fg_color=C['accent'] if is_sel else C['btn_bg'],
-                hover_color='#6090f0' if is_sel else C['btn_hover'],
-                command=lambda d=drv: self._select_driver(d),
-            ).pack(side="right", padx=4)
+        # Only rebuild driver list if drivers actually changed
+        new_key = [(d["clsid"], d["connected"]) for d in new_drivers]
+        old_key = [(d["clsid"], d["connected"]) for d in self.asio_drivers]
+        if new_key != old_key:
+            self.asio_drivers = new_drivers
+            self._rebuild_driver_list()
+        else:
+            self.asio_drivers = new_drivers
+            self._update_driver_selection()
 
         self.current_cfg = current_cfg
         if self.current_cfg:
@@ -532,6 +607,58 @@ class StudioOneTab(ctk.CTkFrame):
         else:
             self.bottom_var.set("请在 ASIO 列表中选中要修复的声卡")
 
+    def _rebuild_driver_list(self):
+        """Full rebuild of driver list widgets."""
+        for w in self.driver_list.winfo_children():
+            w.destroy()
+        for drv in self.asio_drivers:
+            status = "[在线]" if drv["connected"] else "[离线]"
+            color = "#22c55e" if drv["connected"] else "#6b7280"
+            frame = ctk.CTkFrame(self.driver_list, fg_color="transparent")
+            frame.pack(fill="x", pady=1)
+
+            ctk.CTkLabel(
+                frame,
+                text=f"  {status}  {drv['name']}",
+                font=('Microsoft YaHei UI', 12),
+                text_color=color,
+            ).pack(side="left")
+
+            is_sel = (
+                self.selected_driver
+                and self.selected_driver["clsid"] == drv["clsid"]
+            )
+            sel_text = "已选中" if is_sel else "选中"
+            ctk.CTkButton(
+                frame, text=sel_text, width=70, height=24,
+                font=('Microsoft YaHei UI', 11),
+                fg_color=C['accent'] if is_sel else C['btn_bg'],
+                hover_color='#0ad470' if is_sel else C['btn_hover'],
+                command=lambda d=drv: self._select_driver(d),
+            ).pack(side="right", padx=4)
+
+    def _update_driver_selection(self):
+        """Update only the selection buttons, no rebuild."""
+        for i, frame in enumerate(self.driver_list.winfo_children()):
+            if i >= len(self.asio_drivers):
+                break
+            drv = self.asio_drivers[i]
+            btn = None
+            for child in frame.winfo_children():
+                if isinstance(child, ctk.CTkButton):
+                    btn = child
+                    break
+            if btn:
+                is_sel = (
+                    self.selected_driver
+                    and self.selected_driver["clsid"] == drv["clsid"]
+                )
+                btn.configure(
+                    text="已选中" if is_sel else "选中",
+                    fg_color=C['accent'] if is_sel else C['btn_bg'],
+                    hover_color='#0ad470' if is_sel else C['btn_hover'],
+                )
+
     def _select_driver(self, drv):
         self.selected_driver = drv
         self._refresh()
@@ -546,12 +673,16 @@ class StudioOneTab(ctk.CTkFrame):
         if not self.selected_driver:
             return False, "请先在列表中选择目标声卡"
 
+        ver = self._get_selected_version()
+        s_dir = ver["settings_dir"] if ver else None
+
         cfg = self.current_cfg or {}
         ok = write_audio_engine(
             master_device=self.selected_driver["clsid"],
             sample_rate=self.sr_var.get(),
             block_size=self.bs_var.get(),
             failed_devices="",
+            settings_dir=s_dir,
             floatType=cfg.get("floatType", "0"),
             dropOutProtectionLevel=cfg.get("dropOutProtectionLevel", "0"),
             suspendInBackground=cfg.get("suspendInBackground", "0"),
@@ -563,7 +694,9 @@ class StudioOneTab(ctk.CTkFrame):
         return True, self.selected_driver["clsid"]
 
     def _on_reset(self):
-        p = get_settings_path()
+        ver = self._get_selected_version()
+        s_dir = ver["settings_dir"] if ver else None
+        p = get_settings_path(s_dir)
         if not p or not p.exists():
             self.bottom_var.set("配置文件不存在，无需重置")
             return
@@ -598,6 +731,9 @@ class StudioOneTab(ctk.CTkFrame):
             )
             return
 
+        ver = self._get_selected_version()
+        exe = ver["exe_path"] if ver else find_studio_exe()
+
         # Step 1: Close Studio gracefully before writing config
         proc = get_studio_process()
         if proc:
@@ -614,8 +750,9 @@ class StudioOneTab(ctk.CTkFrame):
         self.bottom_var.set("正在重启 Studio...")
         self.update()
 
-        # Step 3: Restart
-        if restart_studio():
+        # Step 3: Restart with selected version's exe
+        if exe and exe.exists():
+            subprocess.Popen([str(exe)], creationflags=_NO_WIN)
             self._refresh()
             self.bottom_var.set(
                 f"修复完成！已切换到 {self.selected_driver['name']} "

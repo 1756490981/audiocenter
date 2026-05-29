@@ -33,8 +33,8 @@ class VolumeMixerTab(ctk.CTkFrame):
         self._alive = True
 
         # ── master volume ──
-        master_frame = ctk.CTkFrame(self, fg_color='#14142e', corner_radius=10,
-                                     border_width=1, border_color='#1e1e3a')
+        master_frame = ctk.CTkFrame(self, fg_color='#1e1e1e', corner_radius=10,
+                                     border_width=1, border_color='#2a2a2a')
         master_frame.pack(fill='x', padx=12, pady=(12, 4))
 
         header = ctk.CTkFrame(master_frame, fg_color='transparent')
@@ -52,14 +52,14 @@ class VolumeMixerTab(ctk.CTkFrame):
         self._master_mute_var = ctk.BooleanVar(value=False)
         self._master_mute_btn = ctk.CTkButton(
             row, text='🔊', width=28, height=28, fg_color='transparent',
-            hover_color='#222244', font=('Segoe UI', 14),
+            hover_color='#333333', font=('Segoe UI', 14),
             command=self._toggle_master_mute)
         self._master_mute_btn.pack(side='left')
 
         self._master_slider = ctk.CTkSlider(
             row, from_=0, to=100, width=200, height=16,
-            fg_color='#1a1a3a', progress_color='#3b82f6',
-            button_color='#3b82f6', button_hover_color='#6090f0',
+            fg_color='#2a2a2a', progress_color='#07C160',
+            button_color='#07C160', button_hover_color='#0ad470',
             command=self._on_master_slider)
         self._master_slider.pack(side='left', fill='x', expand=True, padx=8)
         self._master_slider.bind('<Button-1>', lambda e: setattr(self, '_master_dragging', True), add='+')
@@ -72,8 +72,8 @@ class VolumeMixerTab(ctk.CTkFrame):
 
         # ── session list (scrollable) ──
         self._session_area = ctk.CTkScrollableFrame(
-            self, fg_color='transparent', scrollbar_button_color='#222244',
-            scrollbar_button_hover_color='#333355')
+            self, fg_color='transparent', scrollbar_button_color='#333333',
+            scrollbar_button_hover_color='#3a3a3a')
         self._session_area.pack(fill='both', expand=True, padx=12, pady=4)
 
         self._empty_label = ctk.CTkLabel(
@@ -101,7 +101,7 @@ class VolumeMixerTab(ctk.CTkFrame):
                 self.after(0, self._update_ui, vol, devs, sess)
             except Exception:
                 pass
-            time.sleep(1.0)
+            time.sleep(2.0)
 
     def _update_ui(self, vol, devs, sess):
         if not self._alive:
@@ -175,9 +175,9 @@ class VolumeMixerTab(ctk.CTkFrame):
             return
 
         # New session frame
-        frame = ctk.CTkFrame(self._session_area, fg_color='#14142e',
+        frame = ctk.CTkFrame(self._session_area, fg_color='#1e1e1e',
                               corner_radius=8, border_width=1,
-                              border_color='#1e1e3a')
+                              border_color='#2a2a2a')
         frame.pack(fill='x', pady=2)
 
         top = ctk.CTkFrame(frame, fg_color='transparent')
@@ -186,7 +186,7 @@ class VolumeMixerTab(ctk.CTkFrame):
         mute_var = ctk.BooleanVar(value=muted)
         mute_btn = ctk.CTkButton(
             top, text='🔇' if muted else '🔊', width=24, height=24,
-            fg_color='transparent', hover_color='#222244',
+            fg_color='transparent', hover_color='#333333',
             font=('Segoe UI', 12))
         mute_btn.configure(command=lambda b=mute_btn, v=mute_var: self._toggle_session_mute(pid, b, v))
         mute_btn.pack(side='left')
@@ -200,10 +200,10 @@ class VolumeMixerTab(ctk.CTkFrame):
             frame._icon_ref = ctk_icon  # prevent GC
 
         ctk.CTkLabel(top, text=name, font=('Microsoft YaHei UI', 12),
-                     text_color='#cccccc', anchor='w').pack(side='left', fill='x', expand=True, padx=(4 if ctk_icon else 6, 6))
+                     text_color='#e0e0e0', anchor='w').pack(side='left', fill='x', expand=True, padx=(4 if ctk_icon else 6, 6))
 
         val_lbl = ctk.CTkLabel(top, text=str(volume), font=('Microsoft YaHei UI', 13),
-                                text_color='#777777', width=24)
+                                text_color='#888888', width=24)
         val_lbl.pack(side='right')
 
         bottom = ctk.CTkFrame(frame, fg_color='transparent')
@@ -211,8 +211,8 @@ class VolumeMixerTab(ctk.CTkFrame):
 
         slider = ctk.CTkSlider(
             bottom, from_=0, to=100, width=200, height=14,
-            fg_color='#1a1a3a', progress_color='#3b82f6',
-            button_color='#3b82f6', button_hover_color='#6090f0',
+            fg_color='#2a2a2a', progress_color='#07C160',
+            button_color='#07C160', button_hover_color='#0ad470',
             command=lambda v, p=pid: self._on_session_slider(p, v))
         slider.set(volume)
         slider.pack(side='left', fill='x', expand=True)
@@ -235,10 +235,10 @@ class VolumeMixerTab(ctk.CTkFrame):
         dev_menu = ctk.CTkOptionMenu(
             bottom, values=dev_names, variable=dev_var,
             width=110, height=22, font=('Microsoft YaHei UI', 13),
-            fg_color='#1a1a3a', button_color='#1a1a3a',
-            button_hover_color='#2a2a4a', text_color='#999999',
-            dropdown_fg_color='#14142e', dropdown_text_color='#999999',
-            dropdown_hover_color='#222244',
+            fg_color='#2a2a2a', button_color='#2a2a2a',
+            button_hover_color='#3a3a3a', text_color='#999999',
+            dropdown_fg_color='#1e1e1e', dropdown_text_color='#999999',
+            dropdown_hover_color='#333333',
             command=lambda choice: self._on_session_device(pid, choice))
         dev_menu.pack(side='right', padx=(6, 0))
 
