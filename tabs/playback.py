@@ -291,6 +291,7 @@ class PlaybackDeviceTab(ctk.CTkFrame):
     # ── format dialog ──
     def _show_format(self, device):
         dialog = ctk.CTkToplevel(self)
+        dialog.attributes('-topmost', True)
         dialog.title('调整格式')
         dialog.geometry('420x380')
         dialog.resizable(False, False)

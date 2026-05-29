@@ -289,6 +289,7 @@ class RecordingDeviceTab(ctk.CTkFrame):
     # ── format dialog ──
     def _show_format(self, device):
         dialog = ctk.CTkToplevel(self)
+        dialog.attributes('-topmost', True)
         dialog.title('调整格式')
         dialog.geometry('420x380')
         dialog.resizable(False, False)
@@ -405,6 +406,7 @@ class RecordingDeviceTab(ctk.CTkFrame):
     # ── listen dialog ──
     def _show_listen(self, device):
         dialog = ctk.CTkToplevel(self)
+        dialog.attributes('-topmost', True)
         dialog.title('侦听设备')
         dialog.geometry('360x220')
         dialog.resizable(False, False)
