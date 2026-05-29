@@ -1,8 +1,66 @@
 """Profile manager tab — save/load/delete/export/import audio profiles."""
+import os
+import json
 import customtkinter as ctk
 import threading
 from tkinter import filedialog
 from themecolors import C
+
+# Studio One ASIO config companion files
+_ASIO_PROFILE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'AudioCenter', 'profiles')
+
+
+def _asio_save(name):
+    """Save current Studio One ASIO config alongside the profile."""
+    try:
+        from tabs.studio import read_audio_engine, _load_selected_driver
+        cfg = read_audio_engine()
+        if not cfg:
+            return
+        os.makedirs(_ASIO_PROFILE_DIR, exist_ok=True)
+        data = {
+            'masterDevice': cfg.get('masterDevice', ''),
+            'sampleRate': cfg.get('sampleRate', '48000'),
+            'deviceBlockSize': cfg.get('deviceBlockSize', '128'),
+            'selectedDriverClsid': _load_selected_driver(),
+            'floatType': cfg.get('floatType', '0'),
+            'dropOutProtectionLevel': cfg.get('dropOutProtectionLevel', '0'),
+            'suspendInBackground': cfg.get('suspendInBackground', '0'),
+            'silencePolicy': cfg.get('silencePolicy', '1'),
+            'useEfficiencyCores': cfg.get('useEfficiencyCores', '0'),
+        }
+        path = os.path.join(_ASIO_PROFILE_DIR, f'{name}.asio')
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _asio_load(name):
+    """Restore Studio One ASIO config from companion file."""
+    try:
+        from tabs.studio import write_audio_engine, _save_selected_driver
+        path = os.path.join(_ASIO_PROFILE_DIR, f'{name}.asio')
+        if not os.path.exists(path):
+            return
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        master = data.get('masterDevice', '')
+        if not master:
+            return
+        _save_selected_driver(data.get('selectedDriverClsid', ''))
+        write_audio_engine(
+            master_device=master,
+            sample_rate=data.get('sampleRate', '48000'),
+            block_size=data.get('deviceBlockSize', '128'),
+            floatType=data.get('floatType', '0'),
+            dropOutProtectionLevel=data.get('dropOutProtectionLevel', '0'),
+            suspendInBackground=data.get('suspendInBackground', '0'),
+            silencePolicy=data.get('silencePolicy', '1'),
+            useEfficiencyCores=data.get('useEfficiencyCores', '0'),
+        )
+    except Exception:
+        pass
 
 
 class ProfileManagerTab(ctk.CTkFrame):
@@ -191,6 +249,7 @@ class ProfileManagerTab(ctk.CTkFrame):
                 if r.get('error'):
                     self.after(0, self._show_toast, r['error'], True)
                 else:
+                    _asio_save(name)
                     self.after(0, self._show_toast, f'已保存: {name}', False)
                     self.after(0, lambda: self._save_entry.delete(0, 'end'))
                     self.after(0, self.refresh)
@@ -206,11 +265,12 @@ class ProfileManagerTab(ctk.CTkFrame):
                 if r.get('error'):
                     self.after(0, self._show_toast, r['error'], True)
                     return
+                _asio_load(file_name)
                 errors = r.get('errors', [])
                 if errors:
                     self.after(0, self._show_toast, f'已恢复（部分失败: {", ".join(errors)}）', True)
                 else:
-                    self.after(0, self._show_toast, '已恢复', False)
+                    self.after(0, self._show_toast, '已恢复（含Studio One配置）', False)
             except Exception as e:
                 self.after(0, self._show_toast, f'恢复失败: {e}', True)
         threading.Thread(target=_run, daemon=True).start()

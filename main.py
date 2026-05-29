@@ -21,8 +21,8 @@ TABS = [
     ('🎵', '音量', 'mixer'),
     ('🎧', '播放', 'playback'),
     ('🎤', '录制', 'recording'),
-    ('💾', '配置', 'profiles'),
     ('🔧', 'Studio', 'studio'),
+    ('💾', '配置', 'profiles'),
 ]
 
 
@@ -194,6 +194,10 @@ class AudioCenter(ctk.CTk):
         if self.helper:
             self.helper.close()
         self.destroy()
+        # Force exit to ensure temp dir cleanup
+        import atexit, os
+        atexit.register(lambda: None)
+        os._exit(0)
 
     def _setup_tray(self):
         """Create system tray icon in a background thread."""
