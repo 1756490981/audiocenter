@@ -298,10 +298,26 @@ class StudioOneTab(ctk.CTkFrame):
         self.asio_drivers = []
         self.current_cfg = None
         self.selected_driver = None
+        self._alive = True
 
         self._build_ui()
         # Defer heavy init to keep startup fast
         self.after(50, self._refresh)
+
+        # Background auto-refresh (Studio running state)
+        self._refresh_thread = threading.Thread(target=self._bg_refresh, daemon=True)
+        self._refresh_thread.start()
+
+    def destroy(self):
+        self._alive = False
+        super().destroy()
+
+    def _bg_refresh(self):
+        while self._alive:
+            time.sleep(3.0)
+            if not self._alive:
+                break
+            self.after(0, self._refresh)
 
     def _build_ui(self):
         # ── Status ───────────────────────────────────
