@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create or update (e.g. v1.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ---------------------------------------------------------------
+      # Obtain AudioHelper.exe.
+      #
+      # Normal path: build it from the C# source in AudioHelper/ (recovered by
+      # decompilation -- see AudioHelper/README.md).
+      #
+      # Fallback, only if that directory ever disappears again: recover a
+      # prebuilt AudioHelper.exe from an existing release, or down
+      # AUDIOHELPER_URL. This exists so a release cannot silently ship with a
+      # stale or missing backend.
+      # ---------------------------------------------------------------
+
+      - name: Look for the AudioHelper C# source
+        id: backend_source
+        shell: bash
+        run: |
+          csproj="$(find . -name '*.csproj' -not -path './.venv*' -print -quit)"
+          if [ -n "$csproj" ]; then
+            echo "csproj=$csproj" >> "$GITHUB_OUTPUT"
+            echo "Found C# project: $csproj"
+          else
+            echo "No C# project found; will fall back to a prebuilt AudioHelper.exe."
+          fi
+
+      - name: Set up .NET
+        if: steps.backend_source.outputs.csproj != ''
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build AudioHelper from C# source
+        if: steps.backend_source.outputs.csproj != ''
+        shell: bash
+        run: |
+          dotnet publish "${{ steps.backend_source.outputs.csproj }}" \
+            -c Release --self-contained true -r win-x64 \
+            -p:PublishSingleFile=true -o backend-publish
+          exe="$(find backend-publish -name '*.exe' -print -quit)"
+          echo "Using $exe"
+          cp "$exe" AudioHelper.exe
+
+      - name: Get a prebuilt AudioHelper.exe
+        if: steps.backend_source.outputs.csproj == ''
+        env:
+          AUDIOHELPER_URL: ${{ vars.AUDIOHELPER_URL }}
+        run: >
+          python tools/fetch_audiohelper.py
+          --repo "${{ github.repository }}"
+          --bundle-tag audio
+
+      # ---------------------------------------------------------------
+
+      - name: Build AudioCenter.exe
+        run: python build.py
+
+      - name: Locate the built executable
+        id: artifact
+        shell: bash
+        run: |
+          test -f dist/AudioCenter.exe
+          ls -la dist/
+          echo "path=dist/AudioCenter.exe" >> "$GITHUB_OUTPUT"
+
+      - name: Determine the release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.tag.outputs.name }}"
+          asset="${{ steps.artifact.outputs.path }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --clobber
+          else
+            gh release create "$tag" "$asset" \
+              --title "$tag" \
+              --generate-notes
+          fi
