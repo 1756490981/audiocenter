@@ -9,13 +9,22 @@ dist/
 build/
 *.spec
 
-# Compiled binaries (AudioHelper is built separately)
+# Compiled binaries. AudioHelper is built separately (from source that is not
+# currently in this repository) and fetched by tools/fetch_audiohelper.py
+# during a release build, so never commit it.
 binaries/
 AudioHelper.exe
+backend-publish/
+
+# C# build output, for when the AudioHelper source is recovered.
+*/bin/
+*/obj/
+*.user
 
 # Virtual environment
 venv/
 .venv/
+.venv*/
 
 # IDE
 .vscode/
@@ -28,3 +37,7 @@ Desktop.ini
 
 # PyInstaller temp
 *.manifest
+# ...but the C# backend's manifest is a real source file: AudioHelper.csproj
+# references it via <ApplicationManifest>, and dropping it from a clone makes
+# the build fail. Negate the blanket rule above for it specifically.
+!AudioHelper/app.manifest
