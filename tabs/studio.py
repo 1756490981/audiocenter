@@ -24,7 +24,9 @@ from pycaw.pycaw import AudioUtilities
 from themecolors import C, apply_widget_theme
 
 # ── Paths ────────────────────────────────────────────
-APPDATA = Path(os.environ["APPDATA"])
+# Evaluated at import time, so it must not raise when APPDATA is unset
+# (service accounts, containers, some CI runners).
+APPDATA = Path(os.environ.get("APPDATA") or os.path.expanduser("~\\AppData\\Roaming"))
 CONFIG_DIR = APPDATA / "audio-device-locker"
 BACKUP_DIR = CONFIG_DIR / "backups"
 
